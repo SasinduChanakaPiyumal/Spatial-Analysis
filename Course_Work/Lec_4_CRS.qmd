@@ -1,0 +1,96 @@
+---
+title: "CRS - Lec 4"
+author: "Sasindu Chanaka"
+format: html
+editor: visual
+---
+
+## Example
+
+```{r,message=FALSE, warning=FALSE}
+devtools::install_github("thiyangt/ceylon")
+library(ceylon)
+library(tidyverse)
+library(sp)
+library(viridis)
+```
+
+```{r}
+data(sf_sl_0)
+class(sf_sl_0)
+```
+
+```{r,message=FALSE, warning=FALSE}
+# work with spatial data; sp package will load with rgdal.
+library(sf)
+```
+
+```{r,message=FALSE, warning=FALSE}
+# for metadata/attributes- vectors or rasters
+library(raster)
+```
+
+```{r}
+crs(sf_sl_0)
+```
+
+```{r}
+sf_sl_0
+```
+
+## Visualizing using shape files
+### Map of Sri Lanka
+
+```{r}
+ggplot(sf_sl_0) + geom_sf()
+```
+
+```{r}
+ggplot(sf_sl_0) + geom_sf(fill = 'beige') + theme_minimal()
+```
+
+```{r}
+library(knitr)
+sf_sl_0 %>% kable()
+```
+
+```{r}
+ggplot(data = province) + geom_sf() + theme_minimal()
+```
+
+```{r}
+ggplot(data = district) + geom_sf() + theme_minimal()
+```
+
+```{r}
+province
+```
+
+```{r}
+district
+```
+
+```{r}
+ggplot() + geom_sf(data = province, lwd = 2, col= "black") + 
+  geom_sf(data = district, linetype =21 , col = "red")
+```
+
+```{r}
+ggplot(data = province,aes(fill = population)) + geom_sf() + theme_minimal()+scale_fill_viridis_c(option = "magma") + labs(fill = "Population") 
+```
+
+## Annotations
+
+```{r}
+ggplot(sf_sl_0) + geom_sf(fill = 'beige') + 
+  ggspatial::annotation_north_arrow(location = "br") +
+  ggspatial::annotation_scale(location = "bl")
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
