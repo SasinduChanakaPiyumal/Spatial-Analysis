@@ -1,0 +1,248 @@
+---
+title: "Spatial Interpolation on Meuse Data"
+author: "Sasindu Chanaka Piyumal"
+format: html
+editor: visual
+---
+
+## Dataset
+
+#### The meuse data set provided by package sp is a data set comprising of four heavy metals measured in the top soil in a flood plain along the river Meuse, along with a handful of covariates. The process governing heavy metal distribution seems that polluted sediment is carried by the river, and mostly deposited close to the river bank, and areas with low elevation. This document shows a geostatistical analysis of this data set. The data set was introduced by Burrough and McDonnell, 1998.
+
+## Load Packages and Data
+
+```{r}
+library(sp)
+library(gstat)
+
+data("meuse")
+```
+
+```{r}
+class(meuse)
+```
+
+```{r}
+names(meuse)
+```
+
+## Convert to Spatial Coordinates
+
+```{r}
+coordinates(meuse) <- ~x + y
+class(meuse)
+```
+
+```{r}
+summary(meuse)
+```
+
+```{r}
+coordinates(meuse)[1:5,]
+```
+
+## Zinc Concentration
+
+```{r}
+bubble(meuse, "zinc",main = "Zinc Concentration")
+```
+
+## Spatial data on a regular grid
+
+#### A grid is a structured framework that divides spatial data into equal-sized cells, commonly used in GIS, remote sensing, and spatial analysis. It standardizes data representation, making computations more efficient and enabling seamless integration with machine learning models. Grids help interpolate missing values, enhance visualization (e.g., heatmaps), and support large-scale spatial operations. They are essential for processing geospatial data consistently, allowing for better pattern recognition and decision-making in fields like environmental science, urban planning, and weather forecasting.
+
+```{r}
+data("meuse.grid")
+summary(meuse.grid)
+```
+
+```{r}
+class(meuse.grid)
+```
+
+## Grid into Spatial Coordinate
+
+```{r}
+coordinates(meuse.grid) <- ~x+y
+class(meuse.grid)
+```
+
+```{r}
+gridded(meuse.grid) <- TRUE
+class(meuse.grid)
+```
+
+## Distance to River
+
+```{r}
+image(meuse.grid["dist"])
+title("Distance To River (Red = 0)")
+```
+
+## Spatial Interpolation of Zinc Concentration
+
+### Interpolation using Inverse Distant Weighted Method (IDW)
+
+```{r}
+zinc.idw <- idw(zinc~1 , meuse, meuse.grid)
+class(zinc.idw)
+spplot(zinc.idw["var1.pred"],main = "Zinc IDW Interpolations")
+```
+
+#### Comparing the bubble plot of zinc measurements with the map showing distances to the river reveals that higher zinc concentrations are found near the river. This pattern can be made more linear by applying a logarithmic transformation to the zinc concentrations and using the square root of the distance to the river.
+
+## Logarithmic transformation to the zinc concentrations with the square root of the distance to the river
+
+```{r}
+plot(log(zinc) ~ sqrt(dist), meuse)
+abline(lm(log(zinc) ~ sqrt(dist),meuse))
+```
+
+## Variograms
+
+#### A variogram is a geostatistical tool that measures how spatial data points are correlated based on their separation distance. It helps identify spatial patterns by analyzing how the difference between values changes with distance. The variogram is essential for interpolation methods like kriging, ensuring accurate spatial predictions. It is widely used in fields like environmental science, mining, and agriculture to model spatial variability and optimize data analysis.
+
+##### Here, log(zinc)\~1 means that we assume a constant trend for the variable log(zinc).
+
+```{r}
+lzn.vgm <- variogram(log(zinc) ~ 1, meuse)
+lzn.vgm
+plot(lzn.vgm , main = "Empirical Variogram of log(zinc) ~ 1 ")
+```
+
+## Variogram Fitting
+
+### How to assign key parameters for theoretical variogram
+
+-   **Nugget (C₀):**
+
+    -   Represents small-scale variation or measurement errors.
+
+    -   Determined by the variogram value at near-zero distance.
+
+-   **Sill (C + C₀):**
+
+    -   The point where the variogram levels off, indicating the total variance.
+
+    -   Estimated from the plateau of the variogram plot.
+
+-   **Range (a):**
+
+    -   The distance at which spatial correlation stops (where the variogram reaches the sill).
+
+    -   Estimated by observing where the empirical variogram flattens.
+
+### Selecting a Variogram Model
+
++-------------+---------------------------------------------------+
+| Model       | Behavior                                          |
++=============+===================================================+
+| Spherical   | Increases rapidly, then levels off                |                                 
++-------------+---------------------------------------------------+
+| Exponential | Increases smoothly, never fully reaches sill      |
++-------------+---------------------------------------------------+
+| Gaussian    | Smoothest, increases slowly at first              |
++-------------+---------------------------------------------------+
+| Linear      | Increases indefinitely                            |
++-------------+---------------------------------------------------+
+| Matérn      | Flexible model with an extra smoothness parameter |
++-------------+---------------------------------------------------+
+: Variogram Model Selection
+
+## Fitted Variogram
+```{r}
+# vgm(psill, model, range, nugget)
+# psill represents the difference between the sill and nugget effect.
+lzn.fit <- fit.variogram(lzn.vgm, model = vgm(1,"Sph",900,1))     
+lzn.fit
+plot(lzn.vgm,lzn.fit)
+```
+
+## Log transformation of data relative to the square root
+### Why these transformations are used in variograms:
+#### **Logarithmic transformations** help compress the range of the data, making the variogram less sensitive to large variations and outliers.
+#### **Square root transformations** can be used to handle specific types of data where the variance is proportional to the square of the value, or where you want to address non-linearity between the spatial locations and their variance.
+
+```{r}
+lznr.vgm <- variogram(log(zinc)~sqrt(dist),meuse)
+plot(lznr.vgm, main = "Variogram of log(zinc)~sqrt(dist)")
+```
+
+## Fitted Variogram
+```{r}
+lznr.fit <- fit.variogram(lznr.vgm, model = vgm(1,"Exp",300,1))
+lznr.fit
+plot(lznr.vgm,lznr.fit)
+```
+
+## Kriging
+#### Kriging is a geostatistical interpolation technique used to predict unknown values at unmeasured locations based on observed values from nearby points, while considering the spatial correlation between them. Developed by Danie Krige, the method is widely used in fields such as geology, meteorology, and environmental science. What sets Kriging apart from other interpolation methods is its ability to provide the best linear unbiased estimates by incorporating spatial correlation through a variogram, making it particularly effective when data points exhibit spatial dependencies. Additionally, Kriging not only offers predictions but also quantifies the uncertainty or confidence in those predictions, making it a valuable tool in spatial analysis. It is commonly applied in scenarios where accurate spatial predictions are needed, such as mapping pollutant concentrations, modeling mineral deposits, or analyzing soil quality, providing both high accuracy and a robust measure of uncertainty.
+
+```{r}
+lzn.krined <- krige(log(zinc) ~ 1 , meuse , meuse.grid, model = lzn.fit)
+spplot(lzn.krined["var1.pred"])
+```
+
+## Condition Simulation
+```{r}
+lzn.condsim <- krige(log(zinc) ~ 1,meuse,meuse.grid,model = lzn.fit, nmax =30, nsim =4)
+spplot(lzn.condsim, main = "Four Condition Simulations")
+```
+
+```{r}
+lzn.condism2 <- krige(log(zinc)~sqrt(dist) , meuse, meuse.grid,model = lznr.fit,nmax = 30,nsim = 4)
+spplot(lzn.condism2, main = "Four UK conditional simulations")
+```
+
+## Directional Variograms
+#### A directional variogram is used to analyze spatial correlation in specific directions, helping identify anisotropy in the data. While a standard variogram measures general spatial dependence, a directional variogram reveals if the spatial correlation varies in different directions, which is important when there are directional trends or patterns in the data. This technique is crucial for improving spatial modeling, refining prediction accuracy, and capturing complex spatial patterns, such as those caused by environmental or geological factors that influence data in specific directions.
+
+```{r}
+lzn.dir = variogram(log(zinc)~1, meuse, alpha = c(0,45,90,135))
+lzn.dir
+plot(lzn.dir, main ="Anisotropic Variogram")
+```
+#### This explanation is about using directional variograms to understand how data points are related to each other in different directions. A directional variogram looks at the spatial relationship between data points in specific directions, like North, East, etc., and groups the data based on those directions. The variogram is symmetric, meaning the difference between data points is the same whether you're looking one way or the other. Parameters like range (distance where correlation becomes weak) are calculated for each direction. The model used may not be perfect, so it’s important to check more directions and refine the model further. In simpler models, like when using regression, the relationship between data points is assumed to be the same in all directions (isotropic), which doesn’t take direction into account.
+
+```{r}
+lzndir.fit = vgm(0.59, "Sph", 1200, 0.05, anis = c(45, 0.25))
+plot(lzn.dir, lzndir.fit, as.table = TRUE)
+```
+##### anis = c(45, 0.25): This specifies anisotropy. The first value (45) indicates the direction of anisotropy (45 degrees), and the second value (0.25) represents the anisotropy ratio, which compares the range in the specified direction to the range in other directions.
+##### - Anisotropy Ratio = Range in Direction 1/Range in Direction 1
+
+```{r}
+lznr.dir = variogram(log(zinc)~sqrt(dist),meuse,alpha = c(0,45,90,135))
+plot(lznr.dir,lznr.fit, as.table = TRUE)
+```
+
+#####  The directional dependence is much less obvious; the fitted model here is the fitted isotropic model (equal in all directions)
+## Variogram maps
+#### A variogram map provides a comprehensive view of how spatial correlation varies across space in both distance and direction. It is especially useful for detecting anisotropy and understanding the spatial structure of the data, which is important for tasks like Kriging and spatial modeling.
+
+```{r}
+vgm.map <- variogram(log(zinc)~sqrt(dist),meuse,cutoff = 2000, width = 100,map = TRUE)
+plot(vgm.map, threshold = 5)
+```
+
+## Cross variography
+#### Cross variography is used to analyze the spatial relationship between two different variables, helping to understand their co-variation and spatial dependencies. This technique is important for improving multivariate spatial models and making more accurate spatial predictions by incorporating multiple variables and their inter-relationships.
+```{r}
+g = gstat(NULL,"log(zn)",log(zinc)~sqrt(dist),meuse)
+g = gstat(g,"log(cd)",log(cadmium)~sqrt(dist),meuse)
+g = gstat(g,"log(pb)",log(lead)~sqrt(dist),meuse)
+g = gstat(g,"log(cu)",log(copper)~sqrt(dist),meuse)
+v = variogram(g)
+g = gstat(g,model = vgm(1,"Exp",300,1), fill.all = TRUE)
+g.fit = fit.lmc(v,g)
+g.fit
+```
+
+```{r}
+plot(v,g.fit)
+```
+
+```{r}
+vgm.map = variogram(g, cutoff =1500 ,width = 100, map = TRUE)
+plot(vgm.map, threshold = 5, col.regions = bpy.colors(), xlab = "", ylab = "")
+```
